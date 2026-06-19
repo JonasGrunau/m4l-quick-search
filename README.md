@@ -50,14 +50,41 @@ Then, in Max/Live:
 
 ## 🧠 How it works
 
+```mermaid
+flowchart LR
+    THISDEV(["live.thisdevice"]):::sys
+    BTN(["live.button<br/>Key-Map · MIDI-Map"]):::trig
+    NODE(["node.script<br/>opt-in global hotkey"]):::trig
+    REFRESH(["Refresh"]):::trig
+
+    V8{{"🧠 v8 · quicksearch.js<br/>index · rank · load"}}:::brain
+    JWEB["🔍 jweb Spotlight card<br/>floating window"]:::ui
+    LIVE[("🎛️ Live browser<br/>+ selected track")]:::live
+
+    THISDEV -->|init| V8
+    BTN -->|open| V8
+    NODE -->|open| V8
+    REFRESH -->|refresh| V8
+
+    V8 -->|"state · focus · read · open/close"| JWEB
+    JWEB -->|"query · enter · close"| V8
+    V8 <-->|"walk index · load_item"| LIVE
+
+    subgraph passthrough["🔊 transparent audio passthrough"]
+        direction LR
+        PLUGIN["plugin~"] --> POUT["plugout~"]
+    end
+    class PLUGIN,POUT audio
+
+    classDef trig fill:#242424,stroke:#ffad56,color:#e8e8e8;
+    classDef brain fill:#1c1c1c,stroke:#b18cf0,color:#f4f4f4,stroke-width:2px;
+    classDef ui fill:#1c1c1c,stroke:#5cc8d6,color:#f4f4f4;
+    classDef live fill:#20242b,stroke:#7bd88f,color:#e8e8e8;
+    classDef sys fill:#242424,stroke:#888888,color:#cccccc;
+    classDef audio fill:#161616,stroke:#637e86,color:#a9d6df;
 ```
-live.thisdevice ─"init"─▶ v8 (quicksearch.js) ◀─"open"── live.button  (Key-Map / MIDI-Map)
-                            │  builds index      ◀─"open"── node.script (opt-in global hotkey)
-                            │  ranks + loads      ◀─"refresh"── Refresh
-        outlet0 ─"state/read/focus"─▶ [s ---qs_ui] ─▶ jweb  (the Spotlight card, in a
-        outlet1 ─"open/close"───────▶ [pcontrol] ─▶  floating subpatcher window)
-   jweb ─▶ [s ---qs_from_ui] ─▶ v8        plugin~ ─▶ plugout~  (transparent audio passthrough)
-```
+
+> *Bridge: v8 ⇄ jweb over device‑scoped sends (`---qs_ui` / `---qs_from_ui`); the floating window is shown/hidden by `pcontrol`. Triggers, the browser walk, and `load_item` all funnel through the single v8 brain.*
 
 - 📇 The **v8** brain walks Live's browser (`live_app browser`) once on load, building an in‑memory index of every loadable device/plug‑in (deduped by `uri`, kind tagged by category). The walk is chunked across scheduler ticks so Live never stalls.
 - 🖼️ The **jweb** page is the UI. It talks to v8 over the `window.max` bridge; state is shipped as base64‑JSON (one Max atom — no escaping headaches).
