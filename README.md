@@ -33,6 +33,7 @@ Hit a hotkey → a search card opens centered over Live → start typing → you
 ```bash
 npm install      # 📦 esbuild + typescript
 npm run build    # 🔨 src → dist/quicksearch.js, builds the device + UI
+npm run dev      # 🔁 live‑reload UI preview in your browser (no Ableton needed)
 npm test         # ✅ unit tests (search / compatibility / bridge)
 ```
 
@@ -186,7 +187,15 @@ The build also emits two self‑contained pages under `dist/` (both git‑ignore
 
 ### 🛠️ Dev workflow
 
-`npm run watch` rebuilds `dist/quicksearch.js` on every save. To reload it in the running device, send the `v8` object a **`compile`** message, or remove and re‑add the device. *(Auto‑watch is intentionally off — it leaks Live API observers across reloads.)*
+Two independent loops, depending on what you're working on:
+
+| Working on… | Command | Reload |
+|---|---|---|
+| 🎨 **UI / design** (`html/`) | `npm run dev` | browser auto‑reloads on every save (live) |
+| 🧠 **v8 logic** (`src/`) | `npm run watch` | send the `v8` object a **`compile`** message, or re‑add the device |
+
+- `npm run dev` serves `html/` with live reload at `http://localhost:5173` — see [Preview the overlay in a browser](#-preview-the-overlay-in-a-browser). UI/design only (no Max bridge → sample devices).
+- `npm run watch` rebuilds `dist/quicksearch.js` on every save for use in Live. *(Auto‑watch on the `v8` object is intentionally off — it leaks Live API observers across reloads, so reload manually with `compile`.)*
 
 ---
 
