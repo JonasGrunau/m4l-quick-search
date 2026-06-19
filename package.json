@@ -1,0 +1,18 @@
+{
+  "name": "m4l-quicksearch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spotlight-style device & plugin search overlay for Ableton Live (Max for Live).",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "device": "node tools/build.mjs --device",
+    "typecheck": "tsc --noEmit",
+    "test": "node tools/test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,12 @@
+# Readable diffs for Max patchers / devices via Ableton's maxdiff textconv.
+# One-time setup (see README → Version control):
+#   git config diff.maxdiff.textconv "python3 /path/to/maxdevtools/maxdiff/amxd_textconv.py"
+*.amxd diff=maxdiff
+*.maxpat diff=maxdiff
+
+# Treat these as text where possible.
+*.maxpat text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.html text eol=lf
+*.css text eol=lf

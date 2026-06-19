@@ -1,0 +1,10 @@
+{
+  "name": "m4l-quicksearch-hotkey",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Opt-in OS-global hotkey helper for M4L QuickSearch (Node for Max).",
+  "main": "global-hotkey.js",
+  "dependencies": {
+    "uiohook-napi": "^1.5.4"
+  }
+}

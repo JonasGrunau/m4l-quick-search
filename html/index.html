@@ -1,0 +1,51 @@
+<!--
+  M4L QuickSearch — jweb overlay.
+
+  In DEV the jweb object loads this file directly (search path). In a FROZEN
+  device jweb loads about:blank and this page's compiled equivalent is injected
+  (see tools/build.mjs and the README). The bridge layer in ui.js works either way.
+-->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="styles.css" />
+
+<div id="scrim">
+  <section id="card" role="dialog" aria-label="QuickSearch">
+    <header id="searchbar">
+      <svg id="glass" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2" />
+        <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <input
+        id="q"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="Search instruments, effects, plug-ins…"
+      />
+      <span id="track-badge" title="Loads onto this track"></span>
+    </header>
+
+    <div id="results-wrap">
+      <ul id="results"></ul>
+      <div id="empty" hidden>No matches</div>
+      <div id="indexing" hidden>
+        <div class="bar"><div class="fill"></div></div>
+        <span class="label">Indexing your library…</span>
+      </div>
+    </div>
+
+    <footer id="footer">
+      <span id="notice"></span>
+      <span id="keys">
+        <kbd>↑</kbd><kbd>↓</kbd> navigate
+        <kbd>↵</kbd> load
+        <kbd>esc</kbd> close
+      </span>
+    </footer>
+  </section>
+</div>
+
+<script src="ui.js"></script>
