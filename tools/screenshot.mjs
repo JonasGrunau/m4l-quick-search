@@ -16,9 +16,12 @@ import { bundleUi } from "./bundle-ui.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Transparent page so the tile's rounded corners come out transparent (the README
+// can't round an <img> with CSS, so we bake the rounding into the PNG). The #scrim
+// becomes a solid dark "tile" rounded at 12px — the same radius as the card window.
 const SHOT_STYLE = `<style id="qs-shot">
-  html,body{background:#2b2b2b !important}
-  #scrim{background:rgba(0,0,0,0.22)}
+  html,body{background:transparent !important}
+  #scrim{background:#2b2b2b; border-radius:12px}
   #results-wrap{max-height:none !important}   /* show every row, no scrollbar */
 </style>`;
 
@@ -51,6 +54,8 @@ await page.waitForTimeout(450); // let the open animation settle
 
 await mkdir(join(root, "docs"), { recursive: true });
 const out = join(root, "docs/overlay.png");
-await page.screenshot({ path: out });
+// Screenshot the rounded tile element with a transparent background so the
+// corners outside the 12px radius are transparent in the PNG.
+await page.locator("#scrim").screenshot({ path: out, omitBackground: true });
 await browser.close();
 console.log("✓ " + out);

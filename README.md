@@ -6,12 +6,12 @@
 
 Hit a hotkey → a search card opens centered over Live → start typing → your instruments, effects & plug‑ins fuzzy‑match instantly → press <kbd>↵</kbd> and it lands on the selected track.
 
-<img src="docs/overlay.png" alt="M4L QuickSearch — Spotlight-style search overlay over Ableton Live, showing fuzzy-matched instruments, effects and plug-ins with category badges" width="760">
-
 ![Ableton Live 12.2+](https://img.shields.io/badge/Ableton%20Live-12.2%2B-ffad56?style=flat-square)
 ![Max 9+](https://img.shields.io/badge/Max-9%2B-5cc8d6?style=flat-square)
 ![Built with TypeScript](https://img.shields.io/badge/v8-TypeScript-b18cf0?style=flat-square)
 ![macOS](https://img.shields.io/badge/macOS-primary-7bd88f?style=flat-square)
+
+<img src="docs/overlay.png" alt="M4L QuickSearch — Spotlight-style search overlay over Ableton Live, showing fuzzy-matched instruments, effects and plug-ins with category badges" width="760">
 
 </div>
 
