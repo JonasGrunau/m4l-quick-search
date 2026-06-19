@@ -66,5 +66,5 @@ if (watch) {
   await esbuild.build(esbuildOptions);
   await writeDevice();
   await bundleUi();
-  console.log("✓ dist/ui.bundle.html  ✓ dist/ui.preview.html");
+  console.log("✓ dist/ui.bundle.html");
 }
