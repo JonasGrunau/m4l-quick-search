@@ -9,6 +9,7 @@
     "watch": "node tools/build.mjs --watch",
     "device": "node tools/build.mjs --device",
     "preview": "node tools/preview.mjs",
+    "dev": "node tools/dev-server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node tools/test.mjs"
   },
