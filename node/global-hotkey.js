@@ -2,8 +2,10 @@
  * Opt-in OS-global hotkey for M4L QuickSearch.
  *
  * Runs inside Node for Max (the `node.script` object). It has NO Live API access
- * — its only job is to listen for a global key and `Max.outlet("open")`, which the
- * patch routes to the v8 brain exactly like the live.button.
+ * — its only job is to listen for a global key and `Max.outlet("show")`, which the
+ * patch routes to the v8 brain exactly like the live.button. (The selector is
+ * "show", not "open": "open" is a reserved js/v8 message that opens the script
+ * source in Max's text editor.)
  *
  * Requires `uiohook-napi` (see package.json). In Max, start the script (the
  * "Global Hotkey" toggle) — if the native module is missing, send the node.script
@@ -49,7 +51,7 @@ let started = false;
 function start() {
   if (!uIOhook || started) return;
   uIOhook.on("keydown", (e) => {
-    if (e.keycode === triggerKey) Max.outlet("open");
+    if (e.keycode === triggerKey) Max.outlet("show");
   });
   try {
     uIOhook.start();

@@ -50,8 +50,9 @@ declare class Dict {
 
 /**
  * LiveAPI — the bridge to the Live Object Model.
- * Construct with a path (`new LiveAPI(cb, "live_app browser")`) or an id.
+ * Construct with a path (`new LiveAPI(cb, "live_set view selected_track")`) or an id.
  * `id` is a dynamic numeric handle (as a string) — never persist it.
+ * NOTE: the browser is NOT in the LiveAPI LOM — it lives behind the Python bridge.
  */
 declare class LiveAPI {
   constructor(callback?: ((args: unknown[]) => void) | null, pathOrId?: string);

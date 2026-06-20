@@ -7,13 +7,15 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "watch": "node tools/build.mjs --watch",
-    "device": "node tools/build.mjs --device",
     "dev": "node tools/dev-server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node tools/test.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.24.2",
+    "esbuild": "^0.25.0",
     "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }

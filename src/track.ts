@@ -13,15 +13,17 @@
  */
 
 import type { Kind, TrackInfo, TrackKind } from "./types.ts";
-import { idList, readBool, readString } from "./liveutil.ts";
+import { idList, readBool, readString, errMessage } from "./liveutil.ts";
 
 /**
- * Classify a track by comparing its id against the master and return tracks —
- * robust regardless of how Live formats the selected_track path. Master/return
- * are audio-only, so this only affects the footer label (the load rule keys off
- * has_midi_input), but it keeps that label correct.
+ * Classify the master/return tracks by comparing the id against the master and
+ * return-track ids — robust regardless of how Live formats the selected_track
+ * path. These tracks are audio-only and DON'T expose `has_midi_input` /
+ * `is_foldable`, so the caller checks this first and skips those reads (which
+ * would otherwise post benign "no such attribute" errors). Returns null for a
+ * normal track, which the caller then resolves via those properties.
  */
-function classifyById(id: string, hasMidi: boolean, isGroup: boolean): TrackKind {
+function classifySpecialById(id: string): TrackKind | null {
   const master = new LiveAPI(null, "live_set master_track");
   const masterId = master.id;
   if (master.freepeer) master.freepeer();
@@ -32,15 +34,14 @@ function classifyById(id: string, hasMidi: boolean, isGroup: boolean): TrackKind
   if (set.freepeer) set.freepeer();
   if (returns.indexOf(id) >= 0) return "return";
 
-  if (isGroup) return "group";
-  if (hasMidi) return "midi";
-  return "audio";
+  return null;
 }
 
 export class TrackWatcher {
   private api: LiveAPI | null = null;
   private current: TrackInfo = { name: "", kind: "none" };
   private onChange: (info: TrackInfo) => void;
+  private refreshTask: Task | null = null;
 
   /** @param onChange called whenever the selection (or its type) changes. */
   constructor(onChange: (info: TrackInfo) => void) {
@@ -48,9 +49,37 @@ export class TrackWatcher {
   }
 
   start(): void {
-    // The callback fires on selection change; we re-read on each fire.
-    this.api = new LiveAPI(() => this.refresh(), "live_set view selected_track");
-    this.refresh();
+    // CRITICAL: a LiveAPI observer callback fires *inside* a Live notification.
+    // Doing LiveAPI reads — or constructing LiveAPI objects — in that context
+    // trips a Live re-entrancy limitation that throws a C++ exception (TLimitation
+    // / TNotPossibleWhileRecording). That is NOT a JS throw, so try/catch can't
+    // stop it; it unwinds through Max's v8 bridge and hard-crashes Live.
+    //
+    // So the observer must do NOTHING but schedule work: the actual read runs on
+    // the next scheduler tick, outside the notification, where LiveAPI is safe.
+    this.refreshTask = new Task(() => {
+      try {
+        this.refresh();
+      } catch (e) {
+        error("QuickSearch: selection watch error — " + errMessage(e) + "\n");
+      }
+    }, this);
+
+    // Observe the *property* `selected_track` on `live_set view` — NOT the
+    // selected_track object directly. Observing the property fires the callback
+    // on every selection change without us ever mutating the observed object.
+    // (The old approach re-pointed this same object's `.path` on each read,
+    // which re-resolved its id and re-fired this callback → a scheduler-rate
+    // feedback loop that pegged Max. Reads now go through a throwaway LiveAPI in
+    // read(), so the observed object is never touched.)
+    this.api = new LiveAPI(() => {
+      if (this.refreshTask) this.refreshTask.schedule(0);
+    }, "live_set view");
+    this.api.property = "selected_track";
+
+    // First read is deferred too (the observer's initial fire happens during
+    // construction, which is itself inside Live's notification machinery).
+    this.refreshTask.schedule(0);
   }
 
   get info(): TrackInfo {
@@ -67,16 +96,28 @@ export class TrackWatcher {
 
   private read(): TrackInfo {
     if (!this.api) return { name: "", kind: "none" };
-    // Re-point at the live selection each read (the object behind the path can change).
-    this.api.path = "live_set view selected_track";
-    const id = this.api.id;
-    if (!id || id === "0") return { name: "", kind: "none" };
+    // Read the live selection through a throwaway LiveAPI — NEVER the observed
+    // object (re-pointing it would re-fire the observer and loop, see start()).
+    const sel = new LiveAPI(null, "live_set view selected_track");
+    const id = sel.id;
+    if (!id || id === "0") {
+      if (sel.freepeer) sel.freepeer();
+      return { name: "", kind: "none" };
+    }
 
-    const name = readString(this.api.get("name")) || "Track";
-    const hasMidi = readBool(this.api.get("has_midi_input"));
-    const isGroup = readBool(this.api.get("is_foldable"));
+    const name = readString(sel.get("name")) || "Track";
 
-    return { name, kind: classifyById(id, hasMidi, isGroup) };
+    // Master/return first (by id) — they lack has_midi_input/is_foldable, so
+    // only read those for a normal track.
+    let kind = classifySpecialById(id);
+    if (!kind) {
+      const isGroup = readBool(sel.get("is_foldable"));
+      const hasMidi = readBool(sel.get("has_midi_input"));
+      kind = isGroup ? "group" : hasMidi ? "midi" : "audio";
+    }
+    if (sel.freepeer) sel.freepeer();
+
+    return { name, kind };
   }
 
   /**
@@ -121,6 +162,8 @@ export class TrackWatcher {
   }
 
   dispose(): void {
+    if (this.refreshTask) this.refreshTask.cancel();
+    this.refreshTask = null;
     if (this.api && this.api.freepeer) this.api.freepeer();
     this.api = null;
   }

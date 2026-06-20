@@ -5,9 +5,12 @@
  *   live.thisdevice ─"init"─▶ v8 ◀─"open"── live.button
  *                              │            ◀─"open"── node.script (global hotkey)
  *                              │            ◀─"refresh"── live.text
- *            ┌── outlet0 "state/focus/reset/read" ─▶ [s ---qs_ui] ─▶ (subpatcher) jweb
- *            └── outlet1 "open/close" ─▶ [pcontrol] ─▶ (subpatcher window)
+ *            ┌── outlet0 "state/focus/reset/url" ─▶ [s ---qs_ui] ─▶ (subpatcher) jweb
+ *            ├── outlet1 "open/close" ─▶ [pcontrol] ─▶ (subpatcher window)
+ *            ├── outlet2 "ping/get_index/refresh/load" ─▶ [node.script bridge.js] ─▶ v8
+ *            └── outlet3 "progress/count/active" ─▶ [route] ─▶ progress bar · count · refresh-enable
  *   (subpatcher) jweb ─▶ [s ---qs_from_ui] ─▶ [r ---qs_from_ui] ─▶ v8
+ *   node.script bridge.js ⇄ Python Remote Script (browser walk + load_item) over TCP
  *   plugin~ ─▶ plugout~  (mandatory transparent audio passthrough)
  *
  * Box/attribute shapes are per the verified Max 9 / Live 12 spec (see README).
@@ -184,8 +187,8 @@ export function buildPatcher() {
       id: "obj-v8",
       maxclass: "newobj",
       numinlets: 1,
-      numoutlets: 2,
-      outlettype: ["", ""],
+      numoutlets: 3,
+      outlettype: ["", "", ""],
       patching_rect: [40.0, 220.0, 160.0, 22.0],
       text: "v8 quicksearch.js",
       filename: "quicksearch.js",
@@ -222,19 +225,25 @@ export function buildPatcher() {
       numoutlets: 1,
       outlettype: [""],
       patching_rect: [240.0, 90.0, 45.0, 22.0],
-      text: "open",
+      // "show", NOT "open": sending "open" to a js/v8 object is a reserved Max
+      // message that opens the script source in the text editor instead of running.
+      text: "show",
     }),
 
     // ---- refresh ----
+    // mode 0 = momentary Button (NOT the default toggle, whose "on" state shows the
+    // stock `texton` label "B"). A tap fires a bang → "refresh"; v8 drives `active`
+    // to grey it out while indexing.
     box({
       id: "obj-refresh-text",
       maxclass: "live.text",
+      mode: 0,
       numinlets: 1,
       numoutlets: 1,
       outlettype: [""],
       patching_rect: [320.0, 40.0, 60.0, 22.0],
       presentation: 1,
-      presentation_rect: [120.0, 36.0, 60.0, 22.0],
+      presentation_rect: [16.0, 104.0, 60.0, 22.0],
       saved_attribute_attributes: { valueof: { parameter_enable: 0 } },
       text: "Refresh",
       varname: "qs_refresh",
@@ -247,6 +256,82 @@ export function buildPatcher() {
       outlettype: [""],
       patching_rect: [320.0, 90.0, 60.0, 22.0],
       text: "refresh",
+    }),
+    // Item count shown next to Refresh — "0" until the index arrives, then the total.
+    box({
+      id: "obj-count",
+      maxclass: "comment",
+      numinlets: 1,
+      numoutlets: 0,
+      patching_rect: [400.0, 90.0, 80.0, 20.0],
+      presentation: 1,
+      presentation_rect: [84.0, 106.0, 90.0, 18.0],
+      text: "0",
+      fontsize: 9.0,
+      textcolor: [0.55, 0.55, 0.55, 1.0],
+    }),
+    // Indexing progress bar (non-interactive). v8 sets it 0..1 via `set`; ignoreclick
+    // keeps it display-only. parameter range is float 0..1.
+    box({
+      id: "obj-progress",
+      maxclass: "live.slider",
+      orientation: 1,
+      ignoreclick: 1,
+      numinlets: 1,
+      numoutlets: 1,
+      outlettype: [""],
+      parameter_enable: 1,
+      patching_rect: [320.0, 130.0, 160.0, 16.0],
+      presentation: 1,
+      presentation_rect: [16.0, 132.0, 198.0, 10.0],
+      saved_attribute_attributes: {
+        valueof: {
+          parameter_longname: "Index Progress",
+          parameter_shortname: "Index",
+          parameter_type: 0,
+          parameter_mmin: 0.0,
+          parameter_mmax: 1.0,
+        },
+      },
+      varname: "qs_progress",
+    }),
+    // v8 outlet 3 fans out to the three panel widgets: "progress <f>", "count <i>",
+    // "active <0|1>" (refresh button enable).
+    box({
+      id: "obj-panel-route",
+      maxclass: "newobj",
+      numinlets: 1,
+      numoutlets: 4,
+      outlettype: ["", "", "", ""],
+      patching_rect: [320.0, 160.0, 200.0, 22.0],
+      text: "route progress count active",
+    }),
+    box({
+      id: "obj-prep-progress",
+      maxclass: "newobj",
+      numinlets: 2,
+      numoutlets: 1,
+      outlettype: [""],
+      patching_rect: [320.0, 196.0, 80.0, 22.0],
+      text: "prepend set",
+    }),
+    box({
+      id: "obj-prep-count",
+      maxclass: "newobj",
+      numinlets: 2,
+      numoutlets: 1,
+      outlettype: [""],
+      patching_rect: [410.0, 196.0, 80.0, 22.0],
+      text: "prepend set",
+    }),
+    box({
+      id: "obj-prep-active",
+      maxclass: "newobj",
+      numinlets: 2,
+      numoutlets: 1,
+      outlettype: [""],
+      patching_rect: [500.0, 196.0, 90.0, 22.0],
+      text: "prepend active",
     }),
 
     // ---- opt-in global hotkey ----
@@ -308,6 +393,27 @@ export function buildPatcher() {
       text: "node.script global-hotkey.js @autostart 0",
       saved_object_attributes: {
         autostart: 0,
+        defer: 0,
+        node: "",
+        npm: "",
+        running: 0,
+        watch: 0,
+      },
+    }),
+
+    // ---- browser bridge (always-on) ----
+    // Relays v8 ⇄ the QuickSearch Python Remote Script over TCP. Stdlib `net`
+    // only (no npm), so it autostarts; the browser walk + load_item live there.
+    box({
+      id: "obj-bridge",
+      maxclass: "newobj",
+      numinlets: 1,
+      numoutlets: 2,
+      outlettype: ["", ""],
+      patching_rect: [40.0, 340.0, 300.0, 22.0],
+      text: "node.script bridge.js @autostart 1",
+      saved_object_attributes: {
+        autostart: 1,
         defer: 0,
         node: "",
         npm: "",
@@ -405,6 +511,14 @@ export function buildPatcher() {
     // refresh
     line("obj-refresh-text", 0, "obj-refresh-msg", 0),
     line("obj-refresh-msg", 0, "obj-v8", 0),
+    // panel widgets: v8 outlet 3 -> route -> progress / count / refresh-enable
+    line("obj-v8", 3, "obj-panel-route", 0),
+    line("obj-panel-route", 0, "obj-prep-progress", 0),
+    line("obj-panel-route", 1, "obj-prep-count", 0),
+    line("obj-panel-route", 2, "obj-prep-active", 0),
+    line("obj-prep-progress", 0, "obj-progress", 0),
+    line("obj-prep-count", 0, "obj-count", 0),
+    line("obj-prep-active", 0, "obj-refresh-text", 0),
     // global hotkey enable
     line("obj-hotkey-toggle", 0, "obj-hotkey-sel", 0),
     line("obj-hotkey-sel", 0, "obj-script-start", 0),
@@ -413,6 +527,9 @@ export function buildPatcher() {
     line("obj-script-stop", 0, "obj-node", 0),
     // global hotkey fires "open"
     line("obj-node", 0, "obj-v8", 0),
+    // browser bridge: v8 outlet2 -> bridge, bridge outlet0 -> v8 inlet0
+    line("obj-v8", 2, "obj-bridge", 0),
+    line("obj-bridge", 0, "obj-v8", 0),
     // v8 bridge out
     line("obj-v8", 0, "obj-sui", 0),
     line("obj-v8", 1, "obj-pctrl", 0),
@@ -435,6 +552,12 @@ export function buildPatcher() {
       project: {
         version: 1,
         contents: { patchers: {} },
+        // Max's project_deserialize_searchpath() reads these unconditionally —
+        // a project dict missing `searchpath`/`layout` null-derefs and SIGSEGVs
+        // Live on device load (confirmed via crash report). Real exported .amxd
+        // projects always carry them (usually empty).
+        searchpath: {},
+        layout: {},
         amxdtype: AMXD_AUDIO,
         devpath: ".",
       },

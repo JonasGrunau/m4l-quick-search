@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { fuzzyMatch } from "../src/fuzzy.ts";
 import { search } from "../src/search.ts";
 import { TrackWatcher } from "../src/track.ts";
-import { encodeBase64 } from "../src/b64.ts";
+import { encodeBase64, decodeBase64 } from "../src/b64.ts";
 
 let passed = 0;
 function test(name, fn) {
@@ -85,6 +85,19 @@ test("encodeBase64 matches reference, incl. UTF-8", () => {
   for (const s of ['{"a":1}', "Écho & Déláy — ✓", JSON.stringify({ x: "Pong↵" })]) {
     assert.equal(encodeBase64(s), Buffer.from(s, "utf8").toString("base64"));
   }
+});
+test("decodeBase64 round-trips encodeBase64, incl. UTF-8 + chunk reassembly", () => {
+  const payload = JSON.stringify([
+    { name: "Écho & Déláy — ✓", uri: "query:Audio#Echo", source: "Core Library", kind: "audio_effect" },
+    { name: "Operator", uri: "query:Synths#Operator", source: "Core Library", kind: "instrument" },
+  ]);
+  const b64 = encodeBase64(payload);
+  assert.equal(decodeBase64(b64), payload);
+  // Reassemble from arbitrary base64-substring chunks (what the bridge sends).
+  const parts = [];
+  for (let i = 0; i < b64.length; i += 7) parts.push(b64.slice(i, i + 7));
+  assert.equal(decodeBase64(parts.join("")), payload);
+  assert.deepEqual(JSON.parse(decodeBase64(parts.join("")))[1].name, "Operator");
 });
 
 console.log(`\n${passed} tests passed.`);

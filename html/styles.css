@@ -285,6 +285,18 @@ body {
   transition: width 120ms ease;
 }
 
+/* Browser bridge offline: guide setup instead of a progress bar. */
+#indexing.waiting {
+  padding: 22px 22px;
+  line-height: 1.55;
+}
+#indexing.waiting .bar {
+  display: none;
+}
+#indexing.waiting .label b {
+  color: var(--text);
+}
+
 /* ---- footer ---- */
 #footer {
   display: flex;

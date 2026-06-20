@@ -90,6 +90,24 @@
     // track badge
     el.trackBadge.textContent = TRACK_LABEL[state.track.kind] || "—";
 
+    var connected = !state.bridge || state.bridge === "connected";
+    var hasResults = state.results && state.results.length > 0;
+
+    // Bridge offline (Python Remote Script not running): guide setup instead of a
+    // blank/looping "indexing" — unless we still have a cached list to show.
+    if (!connected && !hasResults) {
+      el.indexing.hidden = false;
+      el.indexing.classList.add("waiting");
+      el.results.innerHTML = "";
+      el.empty.hidden = true;
+      el.indexing.querySelector(".label").innerHTML =
+        "Waiting for the <b>QuickSearch</b> Remote Script…<br>" +
+        "Enable it in Live ▸ Preferences ▸ Link, Tempo &amp; MIDI ▸ Control Surface.";
+      renderNotice(state.notice);
+      return;
+    }
+    el.indexing.classList.remove("waiting");
+
     // indexing / results / empty visibility
     if (state.indexing) {
       el.indexing.hidden = false;

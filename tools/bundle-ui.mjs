@@ -2,12 +2,12 @@
  * Inlines html/styles.css and html/ui.js into html/index.html to produce a
  * single self-contained page at dist/ui.bundle.html.
  *
- * This is the seed for the FROZEN-device injection path: a frozen .amxd can't
- * read a bundled .html, so this self-contained markup is what gets injected via
- * executejavascript (see README → Freezing).
+ * This bundle is baked into the v8 brain at build time (injected via esbuild
+ * `define` as __QS_UI_HTML__ — see tools/build.mjs) and shipped to jweb as a
+ * `data:` URL by src/quicksearch.ts → loadUi(), so the device needs nothing on
+ * the Max search path. A frozen .amxd is therefore fully self-contained.
  *
- * Neither the DEV device nor the browser dev server use this file — the device
- * loads html/index.html off the search path, and `npm run dev` serves html/
+ * The browser dev server does NOT use this file — `npm run dev` serves html/
  * directly with live reload.
  */
 

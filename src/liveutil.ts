@@ -43,3 +43,13 @@ export function readBool(raw: unknown[]): boolean {
 export function readNum(raw: unknown[]): number {
   return raw && raw.length > 0 ? Number(raw[0]) : 0;
 }
+
+/**
+ * Extract a printable message from a caught value. Used by the guards that keep
+ * JS exceptions out of Max's v8 exception reporter (an escaped throw there
+ * null-derefs and hard-crashes Live).
+ */
+export function errMessage(e: unknown): string {
+  if (e && typeof e === "object" && "message" in e) return String((e as { message: unknown }).message);
+  return String(e);
+}

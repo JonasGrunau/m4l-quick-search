@@ -48,3 +48,58 @@ export function encodeBase64(input: string): string {
   }
   return out;
 }
+
+const B64_INDEX: Record<string, number> = (() => {
+  const m: Record<string, number> = {};
+  for (let i = 0; i < B64.length; i++) m[B64[i]] = i;
+  return m;
+})();
+
+/**
+ * Decode a base64 string (inverse of encodeBase64) back to a UTF-8 JS string.
+ * The browser bridge sends the index as base64 (no spaces) so it survives Max's
+ * message layer; this brings it back. Stray non-alphabet chars are skipped, so a
+ * value reassembled from several Max-atom chunks decodes cleanly.
+ */
+export function decodeBase64(input: string): string {
+  // 1) base64 → bytes.
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < input.length; i++) {
+    const v = B64_INDEX[input[i]];
+    if (v === undefined) continue; // skip "=" padding, newlines, anything stray
+    buffer = (buffer << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+
+  // 2) UTF-8 bytes → string.
+  let out = "";
+  let i = 0;
+  while (i < bytes.length) {
+    const b0 = bytes[i++];
+    if (b0 < 0x80) {
+      out += String.fromCharCode(b0);
+    } else if ((b0 & 0xe0) === 0xc0) {
+      const b1 = bytes[i++];
+      out += String.fromCharCode(((b0 & 0x1f) << 6) | (b1 & 0x3f));
+    } else if ((b0 & 0xf0) === 0xe0) {
+      const b1 = bytes[i++];
+      const b2 = bytes[i++];
+      out += String.fromCharCode(((b0 & 0x0f) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f));
+    } else {
+      const b1 = bytes[i++];
+      const b2 = bytes[i++];
+      const b3 = bytes[i++];
+      const cp =
+        ((b0 & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f);
+      const c = cp - 0x10000;
+      out += String.fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff));
+    }
+  }
+  return out;
+}

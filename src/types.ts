@@ -6,6 +6,24 @@ export type Kind = "instrument" | "audio_effect" | "midi_effect" | "plugin";
 /** A track classification, used to predict device compatibility. */
 export type TrackKind = "midi" | "audio" | "group" | "return" | "master" | "none";
 
+/**
+ * Browser-bridge connection state. The browser is unreachable from the LiveAPI, so
+ * enumeration + loading run in a Python Remote Script we reach over a socket bridge.
+ * "disconnected" means that script isn't running/selected — the UI then guides setup.
+ */
+export type BridgeStatus = "connected" | "disconnected";
+
+/**
+ * One raw item as delivered by the browser bridge (the Python Remote Script walks
+ * Live's browser and emits these). The v8 side derives `lower` to make an IndexEntry.
+ */
+export interface IndexItem {
+  name: string;
+  uri: string;
+  source: string;
+  kind: Kind;
+}
+
 /** One loadable entry in the search index. */
 export interface IndexEntry {
   /** Canonical display name (BrowserItem.name) — what we match against. */
@@ -59,4 +77,6 @@ export interface UiState {
   indexing: boolean;
   indexProgress: number; // 0..1
   notice: Notice;
+  /** Browser-bridge link; "disconnected" → the Remote Script isn't running. */
+  bridge: BridgeStatus;
 }

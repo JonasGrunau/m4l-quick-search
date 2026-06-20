@@ -3,6 +3,8 @@
 A Spotlight-style search overlay for Ableton Live, built as a Max for Live device. A hotkey opens a centered search card; typing fuzzy-matches the user's installed instruments, audio effects, MIDI effects, and VST/AU plugins; pressing Enter loads the selected item onto the currently selected track. Incompatible items show an inline hint instead of loading.
 
 > **Status (2026-06-19):** Implemented and verified to the extent possible without Ableton — unit tests, `tsc`, esbuild bundle, and a round-trip through Ableton's own `amxd_textconv.py` all pass; a fresh-eyes logic review found no blocking bugs. The remaining work is the **verify-in-Max checklist** (below). See `README.md`.
+>
+> **Correction (2026-06-20):** The first real run in Ableton exposed a false premise — **Live's browser is NOT in the Max LiveAPI.** The Live 12 `Application` LOM has no `browser` child (only `view` + `control_surfaces`), so `new LiveAPI(null, "live_app browser")` throws *"component 'browser' is not an object"* and indexed **0** items. The browser + `load_item` exist only in the **Python Remote Script** API (`Live.Application.get_application().browser`). Re-architected accordingly: a `remote-script/QuickSearch/` Python control surface owns enumeration + loading, reached from the v8 brain via `node.script bridge.js` over a localhost TCP socket. v8 still owns ranking, compatibility, the overlay, and the device-count load confirmation (tracks/devices *are* exposed). Passages below that describe a LiveAPI browser walk are **superseded** by this bridge design.
 
 ## Context
 
@@ -15,32 +17,32 @@ The user wants a fast, keyboard-driven way to load devices/plugins in Ableton Li
 - **Form factor:** floating centered Spotlight card only (no docked variant).
 
 ### Load-bearing facts (verified)
-- Browser is reached via `new LiveAPI(null, "live_app browser")`. `browser.call("load_item", <id>)` loads onto whatever `live_set view selected_track` points at — it takes **no** track argument.
+- ~~Browser is reached via `new LiveAPI(null, "live_app browser")`.~~ **WRONG (see Correction above)** — the browser is not exposed to the Max LiveAPI. It lives only in the Python Remote Script API (`Live.Application.get_application().browser`); a Remote Script enumerates it and calls `browser.load_item(item)`, which loads onto whatever `live_set view selected_track` points at — taking **no** track argument.
 - `load_item` **silently no-ops** on an incompatible drop (no catchable error). Compatibility **must be predicted before** calling, never caught after.
 - BrowserItem exposes `name`, `is_loadable`, `is_device`, `is_folder`, `uri`, `source`, `children` — but **no "device kind"** field. Kind is inferred from which category root it was walked under and stored per entry.
 - Selected track: `live_set view selected_track` (returns `id 0` when nothing selected — guard it). Classify via `has_midi_input==1` → MIDI; group/return/master by comparing track ids; else audio.
 - Compatibility rules (Live 11/12, identical): instruments + MIDI effects → MIDI tracks only; audio effects → any track; plugins are synth/effect-ambiguous → don't hard-block.
 - Max `key`/`keyup` only fire when the Max window is focused — useless as the trigger. Live Key-Map binds one computer key to a `live.button`; single keys only (no Cmd+Space-style chords). The button outlet fires while Live is focused.
-- `jweb` = Chromium/CEF. Frozen devices **cannot** read bundled HTML → inject the whole UI into `about:blank` via `executejavascript`. Bridge: `window.max.outlet()` (page→Max), `bindInlet` / `executejavascript` / `setDict`/`getDict` (Max→page).
+- `jweb` = Chromium/CEF. The whole overlay (`html/`, inlined at build time) is handed to jweb as a self-contained `data:` URL, so the device needs nothing on the search path and a frozen `.amxd` works too (`executejavascript` injection into `about:blank` is the kept fallback). Bridge: `window.max.outlet()` (page→Max), `bindInlet` / `executejavascript` / `setDict`/`getDict` (Max→page).
 - `.amxd` container = chunks `ampf`(`"aaaa"` audio-effect code) → `meta`(LE 7) → `ptch`(plain UTF-8 patcher JSON + `\n\0`); patcher `classnamespace:"box"`, `project.amxdtype` FourCC. An M4L audio effect **must** wire `plugin~`→`plugout~` or the track goes silent.
 - Floating chromeless overlay = a subpatcher window driven by `thispatcher` (`window flags float nogrow nomenu notitle nozoom`, `window exec`, `window size <l t r b>` in absolute screen px). M4L floating windows **freeze redraw when the user switches tracks** → design the flow as momentary (open → type → Enter → close on one selection).
-- Index must be built on the `live.thisdevice` bang (never in JS global scope), and the browser walk chunked across scheduler ticks (a `Task`) or it freezes Live / drops audio. Dedupe entries by `uri`.
+- Index is requested on the `live.thisdevice` bang (never in JS global scope). The browser walk now runs in the **Python Remote Script**, chunked across Live's main-thread ticks (`schedule_message`) — Live's embedded Python beachballs if you start a thread, so the socket is non-blocking and polled on the tick. Dedupe entries by `uri`.
 
 ## Architecture
 
 ```
-┌───────────────────────────── QuickSearch.amxd (Max Audio Effect) ─────────────────────────────┐
-│  live.thisdevice ──► [v8 quicksearch.js]  ◄── LiveAPI(live_app browser)   build + cache index   │
-│       (init)              │  ▲                LiveAPI(live_set view selected_track)  observer    │
-│                          │  │                                                                    │
-│  live.button ──► open ───┤  │ results / hint / open-close                                        │
-│  (Key-Map / MIDI-Map)    │  ▼                                                                    │
-│  node.script (opt-in) ───┤ [pcontrol] ──► open/close floating chromeless subpatcher window       │
-│  global hotkey ──► open   │     │                                                                 │
-│                           └──► [jweb]  reads index.html (dev) / injected (frozen)  ◄── window.max │
-│                                  Spotlight card: input + results + footer/hint                    │
-│  plugin~ ─► plugout~   (mandatory transparent audio passthrough)                                  │
-└────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────── QuickSearch.amxd (Max Audio Effect) ───────────────────────────┐
+│  live.thisdevice ──► [v8 quicksearch.js] ── LiveAPI(live_set view selected_track)          │
+│       (init)              │  ▲                 (track compat + load confirm — exposed)      │
+│  live.button ──► show ───┤  │ results / hint / open-close                                  │
+│  node.script (hotkey) ───┤  ▼                                                              │
+│  global hotkey ──► show   │ [pcontrol] ──► floating chromeless jweb overlay window ◄ window.max │
+│                           │                                                                │
+│  v8 outlet2  ◄──────────► [node.script bridge.js] ──TCP / JSON──► Python Remote Script      │
+│  ping/get_index/load/refresh   (Node `net` relay)                 get_application().browser │
+│                                                                    walk + load_item(by uri) │
+│  plugin~ ─► plugout~   (mandatory transparent audio passthrough)                            │
+└────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Device type:** Max **Audio Effect** — the only kind placeable on every track including Master/return/group. User parks one instance on the **Master**; it always targets the *selected* track regardless.
@@ -51,28 +53,27 @@ The user wants a fast, keyboard-driven way to load devices/plugins in Ableton Li
 
 ```
 m4l-quick-search/
-├─ QuickSearch.amxd              # frozen release artifact (committed per release)
-├─ QuickSearch Dev.amxd          # generated dev device (git-ignored)
-├─ QuickSearch.maxpat            # generated, human-readable (git-ignored)
 ├─ src/                          # v8 (TypeScript) source
 │  ├─ quicksearch.ts             # entry: glue, message handlers, jweb bridge
-│  ├─ browser-index.ts           # chunked browser walk → flat {name,uri,source,kind}
+│  ├─ browser-index.ts           # bridge index client: request + reassemble {name,uri,source,kind}
 │  ├─ track.ts                   # selected-track classify + compatibility prediction
 │  ├─ search.ts                  # ranking (top-N, compat flags, refs)
 │  ├─ fuzzy.ts                   # subsequence DP scorer + highlight ranges
-│  ├─ loader.ts                  # resolve uri → id, load_item, device-count confirm
+│  ├─ loader.ts                  # selected-track device-count probe (load confirm)
 │  ├─ b64.ts                     # UTF-8 → base64 (no btoa in v8)
 │  └─ liveutil.ts                # LiveAPI atom-array parsers
-├─ dist/                         # esbuild output on the Max search path (git-ignored)
+├─ dist/                         # all build output, git-ignored: quicksearch.js,
+│                                #   ui.bundle.html, QuickSearch Dev.amxd, QuickSearch.maxpat
 ├─ html/                         # the jweb Spotlight UI (index.html, styles.css, ui.js)
-├─ node/                         # opt-in global hotkey (global-hotkey.js + package.json)
+├─ node/                         # bridge.js (browser bridge) + global-hotkey.js + package.json
+├─ remote-script/                # QuickSearch/ — Python Remote Script (browser walk + load_item)
 ├─ tools/                        # build.mjs, patcher.mjs, amxd.mjs, bundle-ui.mjs, test.mjs
 ├─ types/                        # LiveAPI / Max v8 typings
 ├─ .gitattributes               # maxdiff textconv for *.amxd / *.maxpat
 └─ package.json · tsconfig.json
 ```
 
-Dev loop: add `dist/` and `html/` to **Max → Options → File Preferences → search path**, work on `QuickSearch Dev.amxd` unfrozen, reload the `v8` with a manual `compile` message (auto-watch is off — it leaks Live API observers). Release: **Freeze Device**, verify via *File → List Externals and Subpatcher Files*, commit the frozen `.amxd`. Never unfreeze the distributed device to edit it.
+Dev loop: add `dist/` to **Max → Options → File Preferences → search path**, install `remote-script/QuickSearch/` into Live's Remote Scripts folder (select it as a Control Surface), work on `dist/QuickSearch Dev.amxd` unfrozen, reload the `v8` with a manual `compile` message (auto-watch is off — it leaks Live API observers). Release: pushing a `v*` tag runs `.github/workflows/release.yml`, which `npm run build`s and publishes `QuickSearch.zip` (`dist/` + `node/` + `remote-script/` + install note) to the GitHub Release.
 
 ## Build milestones
 
@@ -92,22 +93,22 @@ Callback'd `LiveAPI` on `live_set view selected_track`; classify (id comparison 
 On Enter: guard no-track → predict incompatible → inline hint, no load. If ok: re-resolve `uri` → fresh BrowserItem id, snapshot device count, `load_item` (bare-id then `"id" N` fallback), flash the amber load-OK bar only when the count actually increased.
 
 ### 5 — Spotlight UI + bridge ✓
-HTML/CSS/JS card to the design tokens, base64-JSON state push, keystroke→query→ranked results, arrow/Tab nav, Enter loads, Esc/click-outside closes. Self-contained bundle (`dist/ui.bundle.html`) is the seed for the frozen injection path.
+HTML/CSS/JS card to the design tokens, base64-JSON state push, keystroke→query→ranked results, arrow/Tab nav, Enter loads, Esc/click-outside closes. The self-contained bundle (`dist/ui.bundle.html`) is inlined into the v8 brain at build time and handed to jweb as a `data:` URL.
 
 ### 6 — Floating centered window ✓ (verify in Max)
 Subpatcher + `thispatcher` set `float / notitle / nogrow / …` + `window size`; `[active]` re-applies flags on show; `pcontrol` shows/hides without destroying (jweb stays warm). Momentary open→Enter→close flow.
 
 ### 7 — Triggers (Key-Map + MIDI-Map) ✓
-The `live.button` outlet → open. README documents the one-time Computer-Key-Map / MIDI-Map step.
+The `live.button` outlet → `show` (not the reserved js/v8 word `open`). README documents the one-time Computer-Key-Map / MIDI-Map step.
 
 ### 8 — Opt-in OS-global hotkey ✓
-`node.script` + `uiohook-napi`; gated behind the Global Hotkey toggle; warns about macOS Accessibility/Input-Monitoring permission. The Node process has no Live API access — it only outlets `open`.
+`node.script` + `uiohook-napi`; gated behind the Global Hotkey toggle; warns about macOS Accessibility/Input-Monitoring permission. The Node process has no Live API access — it only outlets `show`.
 
 ### 9 — Fuzzy ranking ✓
 Subsequence DP with exact/prefix boosts, word-boundary/camelCase bonuses, contiguous-run bonus, shorter-name tiebreak, ~24 ms input debounce.
 
 ### 10 — Freeze, distribute, README ◷
-Freeze, verify externals, commit the frozen `.amxd`. (jweb `executejavascript`-injection wiring for a fully self-contained frozen build is the remaining distribution step; dev/personal use works via the search path.)
+Freeze, verify externals, commit the frozen `.amxd`. (The overlay is inlined into the v8 brain and served to jweb as a `data:` URL, so dev and frozen builds are both self-contained; only `dist/` needs to be on the search path.)
 
 ## Design system (Live 12 dark, from shipped `.ask` themes)
 
@@ -139,4 +140,4 @@ Freeze, verify externals, commit the frozen `.amxd`. (jweb `executejavascript`-i
 4. **Blocking browser walk freezes Live** → one reused `LiveAPI`, chunked self-rescheduling `Task`, index plugins last, indexing state.
 5. **Stale dynamic ids** → never persist ids; re-resolve `uri`→id at load time; rebuild index per session.
 6. **Single-key trigger only / key collision** → suggest an uncommon key, document remap, offer MIDI + opt-in global hotkey.
-7. **Frozen device can't read bundled HTML** → `dist/ui.bundle.html` seeds the `executejavascript`-injection path (remaining distribution step); dev uses the search path.
+7. **Frozen device can't read bundled HTML** → the overlay is inlined into the v8 brain (`__QS_UI_HTML__`) and served to jweb as a self-contained `data:` URL; `executejavascript` injection is the kept fallback.

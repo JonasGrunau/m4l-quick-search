@@ -1,9 +1,11 @@
 <!--
   M4L QuickSearch — jweb overlay.
 
-  In DEV the jweb object loads this file directly (search path). In a FROZEN
-  device jweb loads about:blank and this page's compiled equivalent is injected
-  (see tools/build.mjs and the README). The bridge layer in ui.js works either way.
+  At build time tools/bundle-ui.mjs inlines styles.css + ui.js into this page; the
+  v8 brain bakes that bundle in (__QS_UI_HTML__) and hands it to jweb as a
+  self-contained data: URL — no search path needed (a frozen .amxd works too).
+  `npm run dev` serves this folder as-is for browser preview. The ui.js bridge
+  layer works either way.
 -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />

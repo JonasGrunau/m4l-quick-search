@@ -1,0 +1,87 @@
+name: Release device
+
+# Build the device + UI and publish a ready-to-use QuickSearch.zip (everything
+# needed to run it) to the GitHub Release whenever a version tag is pushed.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # required to create/update the Release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build device + UI
+        run: npm run build
+
+      - name: Verify the device was produced
+        run: |
+          test -f "dist/QuickSearch Dev.amxd" \
+            || { echo "::error::dist/QuickSearch Dev.amxd was not built"; exit 1; }
+          ls -la "dist/QuickSearch Dev.amxd"
+
+      # Bundle EVERYTHING the device needs at runtime into one zip:
+      #   dist/          — the device (.amxd) + the v8 brain (quicksearch.js, with
+      #                    the overlay UI baked in and served to jweb as a data: URL)
+      #   node/          — the always-on browser bridge + opt-in global hotkey
+      #   remote-script/ — the Python Remote Script that reaches Live's browser
+      # plus a short INSTALL note. Users add dist/ to the Max search path,
+      # install remote-script/ into Live, and drop the .amxd in.
+      - name: Package QuickSearch.zip
+        run: |
+          PKG="QuickSearch"
+          rm -rf "$PKG" QuickSearch.zip
+          mkdir -p "$PKG/dist" "$PKG/node"
+          cp "dist/QuickSearch Dev.amxd" dist/quicksearch.js "$PKG/dist/"
+          cp node/bridge.js node/global-hotkey.js node/package.json "$PKG/node/"
+          cp -R remote-script "$PKG/remote-script"
+          cat > "$PKG/INSTALL.txt" <<'EOF'
+          M4L QuickSearch — install
+          =========================
+          1. In Max (open it from a Max-for-Live device's edit button):
+             Options > File Preferences > Search Path — add the unzipped
+             `dist/` folder from this archive.
+          2. Install the browser Remote Script (one time): copy
+             `remote-script/QuickSearch/` into Live's Remote Scripts user folder
+               macOS:   ~/Music/Ableton/User Library/Remote Scripts/
+               Windows: ...\Documents\Ableton\User Library\Remote Scripts\
+             then in Live: Preferences > Link, Tempo & MIDI > Control Surface =
+             "QuickSearch".
+          3. In Ableton Live, drag `dist/QuickSearch Dev.amxd` onto a track
+             (the Master track is ideal).
+          4. Open the Max Console — you should see "QuickSearch: indexed N items"
+             (N > 0). "Waiting for the QuickSearch Remote Script" means step 2
+             isn't done.
+          5. Map a hotkey: Key Map mode (Cmd-K), click the device's trigger
+             button, press your key, exit Key Map mode.
+
+          Requires Ableton Live 12.2+ with Max 9+. Full docs:
+          https://github.com/JonasGrunau/m4l-quick-search
+          EOF
+          zip -r QuickSearch.zip "$PKG"
+          echo "--- zip contents ---"
+          unzip -l QuickSearch.zip
+
+      - name: Attach QuickSearch.zip to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: QuickSearch.zip
+          fail_on_unmatched_files: true
