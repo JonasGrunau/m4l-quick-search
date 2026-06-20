@@ -2,8 +2,8 @@
  * Generates the QuickSearch .maxpat patcher object.
  *
  * Topology (see src/quicksearch.ts for the message contract):
- *   live.thisdevice ─"init"─▶ v8 ◀─"open"── live.button
- *                              │            ◀─"open"── node.script (global hotkey)
+ *   live.thisdevice ─"init"─▶ v8 ◀─"show"── live.button
+ *                              │            ◀─"show"── node.script (global hotkey)
  *                              │            ◀─"refresh"── live.text
  *            ┌── outlet0 "state/focus/reset/url" ─▶ [s ---qs_ui] ─▶ (subpatcher) jweb
  *            ├── outlet1 "open/close" ─▶ [pcontrol] ─▶ (subpatcher window)
@@ -383,6 +383,31 @@ export function buildPatcher() {
       patching_rect: [520.0, 200.0, 90.0, 22.0],
       text: "script stop",
     }),
+    // The Global Hotkey live.toggle outputs its restored value (0 = off) on device
+    // load → "sel 1 0" → "script stop". But the hotkey node.script is @autostart 0,
+    // so it isn't running yet → "node.script: Node script not running, can't handle
+    // 'script stop'". This [gate] starts CLOSED and is opened by live.thisdevice
+    // (which fires AFTER parameter restore), so the spurious load-time stop is
+    // dropped; genuine user toggle-offs (script actually running) still pass. We
+    // gate ONLY stop — "script start" is fine to send to a stopped node.script.
+    box({
+      id: "obj-hotkey-stopgate",
+      maxclass: "newobj",
+      numinlets: 2,
+      numoutlets: 1,
+      outlettype: [""],
+      patching_rect: [620.0, 200.0, 50.0, 22.0],
+      text: "gate",
+    }),
+    box({
+      id: "obj-hotkey-gateopen",
+      maxclass: "message",
+      numinlets: 2,
+      numoutlets: 1,
+      outlettype: [""],
+      patching_rect: [700.0, 160.0, 30.0, 22.0],
+      text: "1",
+    }),
     box({
       id: "obj-node",
       maxclass: "newobj",
@@ -524,8 +549,14 @@ export function buildPatcher() {
     line("obj-hotkey-sel", 0, "obj-script-start", 0),
     line("obj-hotkey-sel", 1, "obj-script-stop", 0),
     line("obj-script-start", 0, "obj-node", 0),
-    line("obj-script-stop", 0, "obj-node", 0),
-    // global hotkey fires "open"
+    // "script stop" is gated (right inlet = data); the gate is closed at load and
+    // opened by live.thisdevice (→ "1" → left inlet), so the load-time stop is
+    // dropped while later user toggle-offs pass through to the running script.
+    line("obj-script-stop", 0, "obj-hotkey-stopgate", 1),
+    line("obj-thisdev", 0, "obj-hotkey-gateopen", 0),
+    line("obj-hotkey-gateopen", 0, "obj-hotkey-stopgate", 0),
+    line("obj-hotkey-stopgate", 0, "obj-node", 0),
+    // global hotkey fires "show"
     line("obj-node", 0, "obj-v8", 0),
     // browser bridge: v8 outlet2 -> bridge, bridge outlet0 -> v8 inlet0
     line("obj-v8", 2, "obj-bridge", 0),

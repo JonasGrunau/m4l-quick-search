@@ -73,7 +73,14 @@ export class TrackWatcher {
     // feedback loop that pegged Max. Reads now go through a throwaway LiveAPI in
     // read(), so the observed object is never touched.)
     this.api = new LiveAPI(() => {
-      if (this.refreshTask) this.refreshTask.schedule(0);
+      // Guarded per the quicksearch.ts guard() contract: this observer callback is
+      // an async entry point, so a stray throw here must be logged, not allowed to
+      // escape into Max's v8 exception reporter (which hard-crashes Live).
+      try {
+        if (this.refreshTask) this.refreshTask.schedule(0);
+      } catch (e) {
+        error("QuickSearch: selection observe error — " + errMessage(e) + "\n");
+      }
     }, "live_set view");
     this.api.property = "selected_track";
 

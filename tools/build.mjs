@@ -93,6 +93,18 @@ async function stageRemoteScript() {
   console.log("✓ dist/remote-script/QuickSearch (install into Live's Remote Scripts)");
 }
 
+async function stageNodeScripts() {
+  // The device's `node.script` objects load bridge.js / global-hotkey.js by bare
+  // name, so the files must sit next to the .amxd (dist/ is on the Max search
+  // path). Without this, Max can't start them — "node.script: no connection to
+  // node process manager" — so the browser bridge, and therefore search, never
+  // comes up. package.json travels too for the hotkey's `script npm install`.
+  for (const f of ["bridge.js", "global-hotkey.js", "package.json"]) {
+    await cp(join(root, "node", f), join(root, "dist", f));
+  }
+  console.log("✓ dist/{bridge.js,global-hotkey.js,package.json} (node.script bridge + hotkey)");
+}
+
 await mkdir(join(root, "dist"), { recursive: true });
 
 if (watch) {
@@ -100,11 +112,13 @@ if (watch) {
   await ctx.watch();
   await writeDevice();
   await stageRemoteScript();
+  await stageNodeScripts();
   console.log("watching src/ … (Ctrl-C to stop)");
 } else {
   await esbuild.build(esbuildOptions);
   await writeDevice();
   await checkUiEmbedded();
   await stageRemoteScript();
+  await stageNodeScripts();
   console.log("✓ dist/ui.bundle.html");
 }

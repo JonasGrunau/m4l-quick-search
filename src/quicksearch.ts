@@ -75,6 +75,7 @@ let closeTask: Task | null = null;
 let focusTask: Task | null = null;
 let pendingLoad: { entry: IndexEntry; before: number } | null = null;
 let loadTimeout: Task | null = null;
+let pingTask: Task | null = null;
 
 // ---- bridge -----------------------------------------------------------------
 
@@ -207,10 +208,16 @@ function init(): void {
   indexing = true;
   indexRequested = false;
   indexCount = 0;
-  // Ask the bridge where it stands. Its "bridge connected"/"disconnected" reply
-  // decides whether we request the index now or show setup guidance and wait.
+  // Ask the bridge where it stands — but DEFER it. At device-load time the bridge's
+  // node.script process may not have connected yet, and messaging a not-yet-running
+  // node.script prints "node.script: no connection to node process manager". bridge.js
+  // also self-announces its state ("disconnected"/"connected") when it starts, so this
+  // deferred ping mainly covers the rarer "v8 reloaded while the bridge was already up"
+  // race. Its "connected"/"disconnected" reply decides whether we request the index now.
   pushPanel();
-  sendBridge("ping");
+  if (pingTask) pingTask.cancel();
+  pingTask = new Task(guard("ping", () => sendBridge("ping")));
+  pingTask.schedule(1500);
 }
 
 function open(): void {
@@ -283,7 +290,10 @@ function enter(ref: unknown): void {
   pendingLoad = { entry, before };
   sendBridge("load", encodeBase64(entry.uri));
   if (loadTimeout) loadTimeout.cancel();
-  loadTimeout = new Task(() => finishLoad(false));
+  // Guarded: the contract (see guard() below) requires the load-timeout Task to be
+  // wrapped — finishLoad() reads the LiveAPI, which can throw if the track was
+  // deleted mid-load, and an unguarded throw in a Task hard-crashes Live.
+  loadTimeout = new Task(guard("loadTimeout", () => finishLoad(false)));
   loadTimeout.schedule(LOAD_TIMEOUT_MS);
 }
 

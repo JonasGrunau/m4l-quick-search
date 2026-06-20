@@ -63,7 +63,8 @@ m4l-quick-search/
 │  ├─ b64.ts                     # UTF-8 → base64 (no btoa in v8)
 │  └─ liveutil.ts                # LiveAPI atom-array parsers
 ├─ dist/                         # all build output, git-ignored: quicksearch.js,
-│                                #   ui.bundle.html, QuickSearch Dev.amxd, QuickSearch.maxpat
+│                                #   ui.bundle.html, QuickSearch Dev.amxd, QuickSearch.maxpat,
+│                                #   staged node.script files (bridge.js, global-hotkey.js, package.json) + remote-script/
 ├─ html/                         # the jweb Spotlight UI (index.html, styles.css, ui.js)
 ├─ node/                         # bridge.js (browser bridge) + global-hotkey.js + package.json
 ├─ remote-script/                # QuickSearch/ — Python Remote Script (browser walk + load_item)
@@ -73,7 +74,7 @@ m4l-quick-search/
 └─ package.json · tsconfig.json
 ```
 
-Dev loop: add `dist/` to **Max → Options → File Preferences → search path**, install `remote-script/QuickSearch/` into Live's Remote Scripts folder (select it as a Control Surface), work on `dist/QuickSearch Dev.amxd` unfrozen, reload the `v8` with a manual `compile` message (auto-watch is off — it leaks Live API observers). Release: pushing a `v*` tag runs `.github/workflows/release.yml`, which `npm run build`s and publishes `QuickSearch.zip` (`dist/` + `node/` + `remote-script/` + install note) to the GitHub Release.
+Dev loop: add `dist/` to **Max → Options → File Preferences → search path**, install `remote-script/QuickSearch/` into Live's Remote Scripts folder (select it as a Control Surface), work on `dist/QuickSearch Dev.amxd` unfrozen, reload the `v8` with a manual `compile` message (auto-watch is off — it leaks Live API observers). Release: pushing a `v*` tag runs `.github/workflows/release.yml`, which `npm run build`s and publishes `QuickSearch.zip` (`dist/` — the build stages the `node.script` files into it — + `remote-script/` + install note) to the GitHub Release.
 
 ## Build milestones
 

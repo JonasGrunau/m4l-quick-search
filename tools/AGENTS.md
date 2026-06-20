@@ -8,15 +8,16 @@ The build/dev/test pipeline for QuickSearch. Pure Node ESM (`.mjs`, stdlib only;
 esbuild is the lone heavy dep), invoked via the root `package.json` npm scripts.
 It compiles `src/*.ts` into the v8 bundle (`dist/quicksearch.js`), generates the
 Max patcher JSON, packs it into the loadable `.amxd` device, inlines `html/` into
-the self-contained UI bundle, stages the Python Remote Script into `dist/`, serves
+the self-contained UI bundle, stages the Python Remote Script and the `node.script`
+files into `dist/`, serves
 the browser-only UI dev preview, runs the unit tests, and captures the README
 overlay screenshot. Everything it produces lands in the git-ignored `dist/`.
 
 ## Key Files
 | File | Description |
 | --- | --- |
-| `build.mjs` | Top-level orchestrator behind `npm run build` / `npm run watch`. Calls `bundleUi()` first and injects the inlined overlay into esbuild via `define` (`__QS_UI_HTML__`), esbuilds `src/quicksearch.ts` → `dist/quicksearch.js` (IIFE, es2020, `platform: "neutral"`), then `writeDevice()` (patcher JSON + `.amxd` + round-trip self-check), `checkUiEmbedded()` (asserts the overlay is baked in and the old search-path `read` is gone), and `stageRemoteScript()` (copies `remote-script/` → `dist/remote-script/`). `--watch` runs esbuild in context-watch mode. |
-| `patcher.mjs` | Builds the complete `.maxpat` patcher object as plain JS (`buildPatcher()`). Defines every box/patchline: audio passthrough `plugin~`→`plugout~`, `live.thisdevice` init, the `v8 quicksearch.js` brain, trigger button, refresh, opt-in global-hotkey `node.script`, always-on `bridge.js` `node.script`, send/receive bridge atoms, `pcontrol`, and the floating `jweb` overlay subpatcher. The `project` dict carries `searchpath`/`layout` (see gotcha below). |
+| `build.mjs` | Top-level orchestrator behind `npm run build` / `npm run watch`. Calls `bundleUi()` first and injects the inlined overlay into esbuild via `define` (`__QS_UI_HTML__`), esbuilds `src/quicksearch.ts` → `dist/quicksearch.js` (IIFE, es2020, `platform: "neutral"`), then `writeDevice()` (patcher JSON + `.amxd` + round-trip self-check), `checkUiEmbedded()` (asserts the overlay is baked in and the old search-path `read` is gone), `stageRemoteScript()` (copies `remote-script/` → `dist/remote-script/`), and `stageNodeScripts()` (copies `node/{bridge.js,global-hotkey.js,package.json}` → `dist/` so Max's `node.script` resolves them by bare name next to the `.amxd`). `--watch` runs esbuild in context-watch mode. |
+| `patcher.mjs` | Builds the complete `.maxpat` patcher object as plain JS (`buildPatcher()`). Defines every box/patchline: audio passthrough `plugin~`→`plugout~`, `live.thisdevice` init, the `v8 quicksearch.js` brain, trigger button, refresh, opt-in global-hotkey `node.script` (with the load-time `script stop` `[gate]`, see gotcha), always-on `bridge.js` `node.script`, send/receive bridge atoms, `pcontrol`, and the floating `jweb` overlay subpatcher. The `project` dict carries `searchpath`/`layout` (see gotcha below). |
 | `amxd.mjs` | `.amxd` container reader/writer mirroring Ableton's `amxd_textconv`. `buildAmxd()` writes the `ampf` → `meta` → `ptch` chunk sequence (`[4 ASCII id][UInt32 LE size][payload]`); `parseAmxd()` reads it back. Device codes: `aaaa` audio, `mmmm` midi, `iiii` instrument. Rejects frozen `mx@c` bundles. |
 | `bundle-ui.mjs` | `bundleUi()` inlines `html/styles.css` and `html/ui.js` into `html/index.html` (regex-replacing the `<link>`/`<script src>` tags) → `dist/ui.bundle.html`, and returns the string. `build.mjs` bakes that into the v8 brain via esbuild `define` (`__QS_UI_HTML__`); `quicksearch.ts` → `loadUi()` then hands it to jweb as a `data:` URL, so the device needs nothing on the Max search path. Runnable standalone. |
 | `dev-server.mjs` | Zero-dep live-reload server behind `npm run dev` (default port 5173, `PORT=` overrides). Node `http` + `fs.watch` + Server-Sent Events. Serves `html/` directly (NOT the bundle), injects a dark "over-Live" backdrop and a reload `<script>`, and auto-opens the browser. UI/design preview only — no Max bridge, so `ui.js` runs in design-preview mode with sample devices. |
@@ -34,6 +35,14 @@ overlay screenshot. Everything it produces lands in the git-ignored `dist/`.
 - Box/patchline shapes in `patcher.mjs` are per the verified Max 9 / Live 12 spec.
   IDs are referenced by string in the `lines` array — rename a box `id` and you
   must update every `line(...)` that points at it, or wiring silently breaks.
+- **The Global Hotkey "script stop" is gated, on purpose.** The hotkey `live.toggle`
+  emits its restored value (`0`) on device load → `sel 1 0` → `script stop`, but the
+  hotkey `node.script` is `@autostart 0` and not yet running, so that stop would print
+  "node.script: Node script not running, can't handle 'script stop'". `patcher.mjs`
+  routes `script stop` through a `[gate]` that starts closed and is opened by
+  `live.thisdevice` (which fires after parameter restore), dropping the spurious
+  load-time stop while later genuine user toggle-offs still pass. Only `stop` is gated
+  — `script start` is safe to send to a stopped script. Keep this wiring.
 - The overlay `ov-style` message intentionally has **no `front`** token (`pcontrol`
   shows the window; the message only styles it) and sets absolute screen-pixel
   `window size` coords — adjust per display, don't add `front`.
@@ -78,10 +87,10 @@ overlay screenshot. Everything it produces lands in the git-ignored `dist/`.
 - Reads `src/quicksearch.ts` (+ its imports) and, for tests, `src/fuzzy.ts`,
   `src/search.ts`, `src/track.ts`, `src/b64.ts`.
 - Reads `html/index.html`, `html/styles.css`, `html/ui.js` (bundle + dev server + shot).
-- Copies `remote-script/` (the Python Remote Script) into `dist/` for distribution.
+- Copies `remote-script/` (the Python Remote Script) and `node/{bridge.js,global-hotkey.js,package.json}` (the `node.script` files) into `dist/` for distribution.
 - Produces the git-ignored `dist/` build outputs (`quicksearch.js`,
-  `QuickSearch.maxpat`, `QuickSearch Dev.amxd`, `ui.bundle.html`, `remote-script/`)
-  and `docs/overlay.png`.
+  `QuickSearch.maxpat`, `QuickSearch Dev.amxd`, `ui.bundle.html`, `remote-script/`,
+  and the staged `bridge.js`/`global-hotkey.js`/`package.json`) and `docs/overlay.png`.
 - Driven by the npm scripts in the root `package.json`.
 
 ### External

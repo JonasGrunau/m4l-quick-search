@@ -73,7 +73,7 @@ npm test         # ✅ unit tests (search / compatibility / bridge)
    - In Live: **Preferences → Link, Tempo & MIDI**, set any **Control Surface** slot to **QuickSearch** (leave Input/Output to *None*). Live loads it now and on every launch.
 3. ✎ **Open the Max editor.** On the device's title bar in Live, click the **edit button** — the **pencil ✎ icon** (older Live versions show a **wrench 🔧**). A separate **Max** application window opens. *This is the “Max” the next step refers to.*
 4. 🗂️ **Point Max at this repo's `dist/` folder.** With that Max window focused, the macOS menu bar (top of screen) now reads **Max**. Go to **Options → File Preferences → Search Path** and add this repo's **`dist/`** folder, then close the editor.
-   - `dist/` holds `quicksearch.js` (the v8 brain, with the overlay UI baked in); the device finds `node/` (the bridge) next to it. The Dev device loads the brain live from this path.
+   - `dist/` holds `quicksearch.js` (the v8 brain, with the overlay UI baked in) **and** the `node.script` bridge/hotkey (`bridge.js`, `global-hotkey.js`) — `npm run build` stages those into `dist/` so the device finds them next to the `.amxd`. (Load the device from anywhere those aren't reachable and the bridge can't start: *“node.script: no connection to node process manager.”*) The Dev device loads the brain live from this path.
 5. 🖥️ **Confirm it loaded.** Open the Max console (**Window → Max Console**) — you should see `QuickSearch: init (browser bridge)` then `QuickSearch: indexed N items` with **N > 0**. If the overlay reads *“Waiting for the QuickSearch Remote Script,”* re‑check step 2.
 6. ⌨️ **Map the hotkey:** enter **Key Map** mode (<kbd>⌘K</kbd>), click the device's **trigger button**, press your key (a function key or backtick works great — single keys only), exit Key Map mode.
 7. 🎉 **Use it:** press your key anywhere in Live → the overlay opens. Type, <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>↵</kbd> to load, <kbd>esc</kbd> to close.
@@ -181,10 +181,10 @@ Edit `html/index.html`, `styles.css`, or `ui.js` and the change appears instantl
 
 <br>
 
-Distribution is a **zip of everything the device needs at runtime** — the device reads its brain (`dist/quicksearch.js`, with the overlay UI baked in) off the Max search path, the `node/` scripts sit alongside it, and the `remote-script/` browser bridge is installed once into Live. All of those travel in the zip.
+Distribution is a **zip of everything the device needs at runtime** — the device reads its brain (`dist/quicksearch.js`, with the overlay UI baked in) off the Max search path, the `node.script` bridge/hotkey are staged into `dist/` alongside it, and the `remote-script/` browser bridge is installed once into Live. All of those travel in the zip.
 
-- 🤖 **Automated:** pushing a `v*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which `npm run build`s, then publishes **`QuickSearch.zip`** (`dist/` + `node/` + `remote-script/` + `INSTALL.txt`) to the GitHub Release. That zip is what the [Quick start](#-just-want-to-use-it) links to.
-- ✋ **By hand:** `npm run build`, then zip the `dist/`, `node/`, and `remote-script/` folders together.
+- 🤖 **Automated:** pushing a `v*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which `npm run build`s, then publishes **`QuickSearch.zip`** (`dist/` + `remote-script/` + `INSTALL.txt`) to the GitHub Release. That zip is what the [Quick start](#-just-want-to-use-it) links to.
+- ✋ **By hand:** `npm run build`, then zip the `dist/` and `remote-script/` folders together (the build already stages the `node/` scripts into `dist/`).
 
 > 💡 The overlay page is inlined into the v8 brain at build time (`tools/bundle-ui.mjs` → `__QS_UI_HTML__`) and handed to jweb as a `data:` URL, so the device is self‑contained — nothing extra on the search path, and a frozen `.amxd` works too.
 

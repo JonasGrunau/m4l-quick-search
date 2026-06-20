@@ -25,12 +25,18 @@ The device's bridge (node.script) connects automatically once the script loads.
 from __future__ import absolute_import
 
 import json
+import logging
 import socket
 import struct
 import traceback
 
 import Live
 from ableton.v2.control_surface import ControlSurface
+
+# ableton.v2's ControlSurface (unlike the legacy _Framework one) has no
+# log_message; the shim method below routes to this logger, which Live forwards
+# to its Log.txt.
+_LOGGER = logging.getLogger("QuickSearch")
 
 # Must match PORT in node/bridge.js.
 HOST = "127.0.0.1"
@@ -80,6 +86,14 @@ class QuickSearch(ControlSurface):
         # the poll loop.
         self._begin_walk()
         self.schedule_message(TICK, self._tick)
+
+    def log_message(self, *messages):
+        # ableton.v2.control_surface.ControlSurface has show_message but NOT the
+        # legacy _Framework `log_message` our diagnostics call. Without this shim the
+        # very first self.log_message(...) raises AttributeError and aborts __init__,
+        # so the socket server never starts and the bridge stays "disconnected"
+        # (empty index). Route to Python logging, which Live forwards to Log.txt.
+        _LOGGER.info(" ".join(str(m) for m in messages))
 
     # ---- main-thread poll loop ----------------------------------------------
 

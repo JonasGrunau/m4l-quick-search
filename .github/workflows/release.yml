@@ -41,7 +41,10 @@ jobs:
       # Bundle EVERYTHING the device needs at runtime into one zip:
       #   dist/          — the device (.amxd) + the v8 brain (quicksearch.js, with
       #                    the overlay UI baked in and served to jweb as a data: URL)
-      #   node/          — the always-on browser bridge + opt-in global hotkey
+      #                    + the node.script bridge/hotkey (bridge.js, global-hotkey.js,
+      #                    package.json), which MUST sit next to the .amxd so Max's
+      #                    node.script can resolve them by bare name (otherwise
+      #                    "no connection to node process manager" and no search index)
       #   remote-script/ — the Python Remote Script that reaches Live's browser
       # plus a short INSTALL note. Users add dist/ to the Max search path,
       # install remote-script/ into Live, and drop the .amxd in.
@@ -49,9 +52,9 @@ jobs:
         run: |
           PKG="QuickSearch"
           rm -rf "$PKG" QuickSearch.zip
-          mkdir -p "$PKG/dist" "$PKG/node"
+          mkdir -p "$PKG/dist"
           cp "dist/QuickSearch Dev.amxd" dist/quicksearch.js "$PKG/dist/"
-          cp node/bridge.js node/global-hotkey.js node/package.json "$PKG/node/"
+          cp node/bridge.js node/global-hotkey.js node/package.json "$PKG/dist/"
           cp -R remote-script "$PKG/remote-script"
           cat > "$PKG/INSTALL.txt" <<'EOF'
           M4L QuickSearch — install

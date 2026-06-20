@@ -10,7 +10,7 @@ This directory holds the GitHub Actions CI/CD pipelines for M4L QuickSearch. Cur
 
 | File | Description |
 |------|-------------|
-| `release.yml` | Triggered by any `v*` tag push. Runs `npm ci`, `npm test`, then `npm run build` to produce `dist/QuickSearch Dev.amxd` and the v8 brain bundle (with the overlay UI baked in). Packages `dist/` (`.amxd` + `quicksearch.js`), `node/` (`bridge.js`, `global-hotkey.js`, `package.json`), and `remote-script/` (the Python Remote Script) together with a generated `INSTALL.txt` into `QuickSearch.zip`, then attaches it to the Release via `softprops/action-gh-release@v2`. |
+| `release.yml` | Triggered by any `v*` tag push. Runs `npm ci`, `npm test`, then `npm run build` to produce `dist/QuickSearch Dev.amxd` and the v8 brain bundle (with the overlay UI baked in). Packages `dist/` (`.amxd` + `quicksearch.js` + the `node.script` bridge/hotkey `bridge.js`/`global-hotkey.js`/`package.json`, which must sit next to the `.amxd`) and `remote-script/` (the Python Remote Script) together with a generated `INSTALL.txt` into `QuickSearch.zip`, then attaches it to the Release via `softprops/action-gh-release@v2`. |
 
 ## Subdirectories
 
@@ -21,7 +21,7 @@ This directory holds the GitHub Actions CI/CD pipelines for M4L QuickSearch. Cur
 ### Working In This Directory
 
 - The workflow runs on `ubuntu-latest`. The build target (`dist/QuickSearch Dev.amxd`) is produced by `tools/build.mjs` via `npm run build`; if that script or its dependencies change in a way that alters the output filename or path, the `Verify the device was produced` step and the `cp` commands in `Package QuickSearch.zip` must be updated together.
-- The zip packaging step is explicit: it copies individual named files from `dist/` and `node/` — it is NOT a blanket copy of those directories. Adding a new runtime file to either requires adding it to the corresponding `cp` line in `release.yml`, or it will be silently omitted from the release artifact. (`html/` is no longer shipped — the overlay is baked into `dist/quicksearch.js`.)
+- The zip packaging step is explicit: it copies individual named files into the package's `dist/` — the `.amxd` + `quicksearch.js` from `dist/`, and the `node.script` scripts (`bridge.js`, `global-hotkey.js`, `package.json`) from `node/` **into that same `dist/`** so Max's `node.script` can resolve them next to the `.amxd`. It is NOT a blanket copy of those directories. Adding a new runtime file requires adding it to the corresponding `cp` line in `release.yml`, or it will be silently omitted from the release artifact. (`html/` is no longer shipped — the overlay is baked into `dist/quicksearch.js`.)
 - `remote-script/` is copied recursively (`cp -R`), so new files added under `remote-script/QuickSearch/` are included automatically.
 - The `INSTALL.txt` embedded in the workflow is the authoritative user-facing install guide. If port numbers, paths, or Live/Max version requirements change, update it here as well as in the README.
 - The job requires `contents: write` permission to upload the release asset. Do not remove or downscope this permission.
@@ -47,7 +47,7 @@ This directory holds the GitHub Actions CI/CD pipelines for M4L QuickSearch. Cur
 - `tools/build.mjs` — invoked by `npm run build`; produces `dist/QuickSearch Dev.amxd`, `dist/quicksearch.js`, and `dist/ui.bundle.html`.
 - `tools/test.mjs` — invoked by `npm test`; must pass before packaging begins.
 - `html/` (`index.html`, `styles.css`, `ui.js`) — build-time source for the overlay, inlined into `dist/quicksearch.js` by `npm run build`; NOT shipped in the zip.
-- `node/` (`bridge.js`, `global-hotkey.js`, `package.json`) — copied verbatim; the Node-for-Max TCP bridge and optional OS-global hotkey.
+- `node/` (`bridge.js`, `global-hotkey.js`, `package.json`) — copied into the package's `dist/` (next to the `.amxd`); the Node-for-Max TCP bridge and optional OS-global hotkey.
 - `remote-script/` — copied recursively; the Python Remote Script that enumerates Live's browser and serves `load_item` over TCP.
 - `package.json` / `package-lock.json` — drive `npm ci` and expose the `build`/`test` scripts.
 

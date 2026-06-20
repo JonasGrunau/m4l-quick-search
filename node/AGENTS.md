@@ -17,6 +17,7 @@ Node-for-Max scripts loaded by `node.script` objects inside the QuickSearch devi
 
 ### Working In This Directory
 - These run under Node for Max, NOT modern Node tooling. Stick to CommonJS (`require`), `var`/`function` style, and `max-api` (`Max.addHandler`, `Max.outlet`, `Max.post`). No ESM, no TypeScript here.
+- **These files must sit next to the `.amxd`.** Max's `node.script` loads them by bare name off the Max search path, so `tools/build.mjs` (`stageNodeScripts()`) copies `bridge.js`/`global-hotkey.js`/`package.json` into `dist/` on every build — that staged copy is what the device and the release zip actually use. If they're not reachable next to the device, Max prints "node.script: no connection to node process manager" and the search index stays empty. Edit the originals here; never hand-edit the `dist/` copies.
 - `bridge.js` must stay pure Node stdlib — do NOT add npm/native deps to it. Its zero-dependency nature is why it can be the always-on relay without an install step.
 - `PORT = 32985` and `HOST = "127.0.0.1"` in `bridge.js` MUST match `PORT` in `remote-script/QuickSearch/__init__.py`. Change them together or the link silently never connects.
 - The Python wire framing is a 4-byte big-endian length prefix + UTF-8 JSON, in BOTH directions. Don't switch to newline-delimited or send a bare write without the header — `drain()` will stall waiting for bytes that never come.
